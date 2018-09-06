@@ -1,0 +1,94 @@
+
+c-----------------------------------------------------------------------
+C     Temperature dependence of air properties
+c-----------------------------------------------------------------------
+
+      subroutine updateAirProps(dens,
+     &                          visc,
+     &                          thcond,
+     &                          thcap,
+     &                          temper,
+     &                          pres)
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'REFERENCE'
+
+      real dens(1),visc(1),thcond(1),thcap(1)
+      real temper(1),pres,pressure,temperature
+      integer n,i
+
+C     Coeffs are taken from a 3rd order least-squares fit of data
+
+C     Units when input temperature is in [K]
+c     dens [kg/m3]
+c     visc [kg/ms]
+c     thcap [J/kgK]
+c     thcond [W/mK]
+
+      n = lx1*ly1*lz1*nelt
+      do i=1,n
+c        pressure=dens0*(V0**2)*pres  if we send p0th
+        pressure=pres
+        temperature=temper(i)
+        call airDens(dens(i),temperature,pressure)
+        call airVisc(visc(i),temperature)
+        call airThcap(thcap(i),temperature)
+        call airThcond(thcond(i),temperature)
+      enddo
+
+      return
+      end
+
+c-----------------------------------------------------------------------
+      subroutine airDens(dens,temperature,pressure)
+      include 'SIZE'
+      include 'TOTAL'
+
+      real dens,temperature,pressure
+      real R,Mm
+
+      R = 8.314472 ![J/molK]
+      Mm = 28.9664E-3 ![kg/mol]
+
+      dens= Mm * pressure / (R * temperature)
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine airVisc(visc,temperature)
+
+      real visc,temperature
+
+      visc = 1.855085E-5
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine airThcap(thcap,temperature)
+
+      real thcap,temperature
+
+      thcap= 1003.62
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine airThcond(thcond,temperature)
+
+      real thcond,temperature
+
+      thcond=0.0260305
+ 
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine airBeta(beta,temperature)
+
+      real beta,temperature
+
+      beta=1.0/temperature
+ 
+      return
+      end
+c-----------------------------------------------------------------------

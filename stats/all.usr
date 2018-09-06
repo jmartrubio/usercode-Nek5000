@@ -1,0 +1,618 @@
+c-----------------------------------------------------------------------
+C
+C  USER SPECIFIED ROUTINES:
+C
+C     - boundary conditions
+C     - initial conditions
+C     - variable properties
+C     - local acceleration for fluid (a)
+C     - forcing function for passive scalar (q)
+C     - general purpose routine for checking errors etc.
+C
+# define tSTATSTART uparam(1)
+# define tSTATFREQ uparam(2)
+# define readSTAT uparam(3)
+
+c-----------------------------------------------------------------------
+      subroutine uservp (ix,iy,iz,eg)
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+      include 'FLUIDPROP'
+      include 'REFERENCE'
+
+      integer e,f,eg
+
+      e = gllel(eg)
+
+      if(ifield.eq.1) then !momentum
+        utrans=1.0
+        udiff=Pr_/sqrt(Ra_)
+      elseif(ifield.eq.ifld_h) then !enthalpy
+        utrans=1.0
+        udiff=1.0/sqrt(Ra_)
+      endif
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userf  (ix,iy,iz,eg)
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+      include 'FLUIDPROP'
+      include 'REFERENCE'
+      include 'BCS'
+
+      integer e,eg
+      e = gllel(eg)
+
+c     Note: this is an acceleration term, NOT a force!
+c     Thus, ffx will subsequently be multiplied by rho(x,t).
+c     What if I want a force?!?
+
+      if(ifield.eq.1) then !momentum
+        ffx = 0.0
+        ffy = Pr_*temp
+        ffz = 0.0
+      endif
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userq  (ix,iy,iz,eg)
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      integer e,eg
+
+      e = gllel(eg)
+
+      qvol=0.0
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userimpli  (ix,iy,iz,eg)
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      integer e,eg
+
+      e = gllel(eg)
+      impli=0.0
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usermask  (ix,iy,iz,eg)
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+      include 'WALLINFO'
+
+
+      integer e,eg
+      e = gllel(eg)
+
+      return
+      end
+
+c-----------------------------------------------------------------------
+      subroutine userbc (ix,iy,iz,iside,ieg)
+c     NOTE ::: This subroutine is called for every boundary point
+c              declared with a lowercase letter (eg. it is called for
+c              'v  ' and 't  ', but not for 'P  ' or 'W  ')
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+      include 'BCS'
+      include 'REFERENCE'
+      include 'FLUIDPROP'
+
+      integer e,ieg,iside
+
+      e = gllel(ieg)
+
+      if(ifield.eq.ifld_h) then
+        if(cbc(iside,e,ifield).eq.'t  ') then
+          if(xm1(ix,iy,iz,e).gt.0.5) then
+            temp=-0.5
+          else 
+            temp=0.5
+          endif
+        elseif(cbc(iside,e,ifield).eq.'f  ') then
+          flux=0.0
+        endif
+      endif
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine useric (ix,iy,iz,ieg)
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+      include 'FLUIDPROP'
+      include 'REFERENCE'
+      include 'BCS'
+
+      integer e,ieg
+      e = gllel(ieg) 
+      
+      if(ifield.eq.1) then
+        ux=0.0
+        uy=0.0
+        uz=0.0
+      elseif(ifield.eq.ifld_h) then
+        temp=0.0
+      endif
+
+
+      return
+      end
+c-----------------------------------------------------------------------
+      include 'airProps.usr'
+      include 'utilities.usr'
+      include 'utilitiesJavi.usr'
+      include 'yp_Javi.usr'
+      include 'tkeCompJavi.usr'
+c-----------------------------------------------------------------------
+      subroutine usrdat
+      include 'SIZE'
+      include 'TOTAL'
+      include 'FLUIDPROP'
+      include 'BCS'
+      include 'REFERENCE'
+
+      integer n
+
+      n=lx1*ly1*lz1*nelv
+
+c     Fields
+      ifld_h=2
+
+c     Dimensionless case
+
+      Pr_=0.71
+      Ra_=1.5E9
+
+      visc0=Pr_/sqrt(Ra_)
+      dens0=1.0
+      g(1)=0.0
+      g(2)=-1.0
+      g(3)=0.0
+
+      beta0=Pr_
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat2
+      include 'SIZE'
+      include 'TOTAL'
+      include 'WALLINFO'
+      include 'BCS'
+
+      character fname*32
+      integer ie,iside,i0,i1,j0,j1,k0,k1,i
+      real xmin,xmax,ymin,ymax
+      n=nx1*ny1*nz1*nelv
+
+c     First we scale the geometry
+
+C     Definition of thermal boundary conditions
+      do ie=1,nelv
+        do iside=1,2*ldim 
+          if(cbc(iside,ie,1).eq.'W  ') then
+              i0=1
+              j0=1
+              k0=1
+              i1=lx1
+              j1=ly1
+              k1=lz1
+            if (iside.eq.1) then
+              j1=1
+            elseif (iside.eq.2) then
+              i0=lx1
+            elseif (iside.eq.3) then
+              j0=ly1
+            elseif (iside.eq.4) then
+              i1=1
+            elseif (iside.eq.5) then
+              k1=1 
+              cbc(iside,ie,2)='I  '
+            elseif (iside.eq.6) then
+              k0=6
+              cbc(iside,ie,2)='I  '
+            endif
+            if ((iside.ne.5).and.(iside.ne.6)) then
+
+              xmin = min(
+     &               min(
+     &               min(
+     &               xm1(i0,j0,1,ie),
+     &               xm1(i1,j0,1,ie)),
+     &               xm1(i1,j1,1,ie)),
+     &               xm1(i0,j1,1,ie))
+
+              xmax = max(
+     &               max(
+     &               max(
+     &               xm1(i0,j0,1,ie),
+     &               xm1(i1,j0,1,ie)),
+     &               xm1(i1,j1,1,ie)),
+     &               xm1(i0,j1,1,ie))
+
+              ymin = min(
+     &               min(
+     &               min(
+     &               ym1(i0,j0,1,ie),
+     &               ym1(i1,j0,1,ie)),
+     &               ym1(i1,j1,1,ie)),
+     &               ym1(i0,j1,1,ie))
+
+              ymax = max(
+     &               max(
+     &               max(
+     &               ym1(i0,j0,1,ie),
+     &               ym1(i1,j0,1,ie)),
+     &               ym1(i1,j1,1,ie)),
+     &               ym1(i0,j1,1,ie))
+              if (xmax.lt.1e-5) then
+                cbc(iside,ie,2)='t  '
+              elseif (xmin.gt.(1-1e-5)) then
+                cbc(iside,ie,2)='t  '
+              else
+                cbc(iside,ie,2)='I  '
+              endif
+
+            endif
+          endif
+        enddo
+      enddo
+
+c     We are making this case dimensional, 700 mm
+c      do i=1,n
+c         xm1(i,1,1,1)=xm1(i,1,1,1)*0.7
+c         ym1(i,1,1,1)=ym1(i,1,1,1)*0.7
+c         zm1(i,1,1,1)=zm1(i,1,1,1)*0.7
+c      enddo
+
+      call cheap_dist(walldist,1,'W  ')      
+
+
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine usrdat3
+      include 'SIZE'
+      include 'TOTAL'
+      include 'WALLINFO'
+
+      call count_boundaries
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine userchk
+      include 'SIZE'
+      include 'TOTAL'
+      include 'FLUIDPROP'
+      include 'WALLINFO'
+      include 'REFERENCE'
+      include 'AVGINCOMP'
+
+c      if (istep.eq.0.0) then
+c        call gfldr('all0.f00004')
+c      endif
+
+      call print_limits
+
+c     Constant properties for now
+
+c      call updateAirProps(dens,
+c     &                    visc,
+c     &                    thcond,
+c     &                    thcap,
+c     &                    t(1,1,1,1,ifld_h-1),
+c     &                    Pref)
+
+
+c      if (ifoutfld) then
+c        if (nid.eq.0) write(*,*)'Exporting fields:'
+c
+c        call save_yp(t(1,1,1,1,2),
+c     &               walldist,
+c     &               dens,
+c     &               visc)
+c      
+c        call outpost2(vx,vy,vz,pr,t,2,'ypl')
+cc        
+c      endif
+     
+      if (istep.eq.0) call set_obj
+
+      call computeHeatInt(t(1,1,1,1,ifld_h-1)) 
+
+      call budgets_incomp_avg(tSTATFREQ,tSTATSTART,int(readSTAT))
+      
+      if (lastep.eq.1) then
+        call budgets_incomp_calc(0,.true.)
+c        call kolmogorov(0)
+      endif
+     
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine print_limits
+      include 'SIZE'
+      include 'TOTAL'
+      include 'FLUIDPROP'
+      include 'WALLINFO'
+      include 'REFERENCE'
+      include 'CTIMER'
+
+      integer lxyze
+      parameter(lxyze=lx1*ly1*lz1*lelv)
+
+C     Primitive Variables
+      real umin,umax,uave,vmin,vmax,vave,wmin,wmax,wave,pmin,pmax,pave
+      real Tmin,Tmax,Tave,densmin,densmax,densave
+      real rmsu,rmsv,rmsw,rmsp,rmsT
+      real du,dv,dw,dp,difT
+
+C     other variables
+      real ypmin,ypmax,ypave,yp,up,uup,uvp,vvp,wwp
+
+      integer n,e
+      real vol
+
+      real utmin,utmax,utave
+      real ypField(lx1,ly1,lz1,lelv)
+
+      n=nx1*ny1*nz1*nelv
+      vol=glsum(bm1,n)
+
+c     We are actually going to show the real values 
+c     (we make them dimensional)
+
+      call get_limits(vx,umin,umax,uave,du,vxlag,rmsu,n)
+
+
+      call get_limits(vy,vmin,vmax,vave,dv,vylag,rmsv,n)
+      if(if3d) call get_limits(vz,wmin,wmax,wave,dw,vzlag,rmsw,n)
+
+      call get_limits(pr,pmin,pmax,pave, dp,prlag,rmsp,n)
+
+      call get_limits(t(1,1,1,1,ifld_h-1),Tmin,Tmax,Tave,difT
+     &                         ,tlag(1,1,1,1,1,ifld_h-1),rmsT,n)
+
+c    dens and visc are real props, we need to dimensionalize, 
+c     walldist in already dimless 
+
+      call y_p_limits(walldist,ypmin,ypmax,ypave,utmin,utmax,utave,
+     &                      ypField)
+
+      if(nid.eq.0) then
+        write(*,254) 'Limits','min','max','ave','max d/dt','rms d/dt'
+        write(*,253) 'U velocity',umin,umax,uave,du,rmsu
+        write(*,253) 'V velocity',vmin,vmax,vave,dv,rmsv
+        if(if3d) write(*,253) 'W velocity',wmin,wmax,wave,
+     &                                          dw,rmsw
+        write(*,253) 'Pessure',pmin,pmax,pave,
+     &                               dp,rmsp
+        write(*,253) 'Temperature',Tmin,Tmax,
+     &                              Tave,
+     &                               difT,(rmsT)
+        write(*,255) 'yPlus',ypmin,ypmax,ypave
+        write(*,253) 'p0th',0.0,0.0,p0th,dp0thdt,0.0
+        write(*,*)
+      endif
+
+ 253  format(a15,5es13.4)
+ 254  format(a15,5a13)
+ 255  format(a15,3es13.4)
+
+ 256  format(a15,1es13.4)
+ 257  format(8es18.11)
+ 258  format(8a18)
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine set_obj
+      include 'SIZE'
+      include 'TOTAL'
+
+      integer ie,iside,i0,i1,j0,j1,k0,k1,i,eg, nface,iobj,ii
+      real xmin,xmax,ymin,ymax,zmin,zmax
+      real w1(0:maxobj)
+      integer nmemberTot(0:maxobj)
+
+      n=nx1*ny1*nz1*nelv
+
+      ! We have already 8 points, nhis, then we add the iobj of walls
+      ! Boundary    |  iobj  | ii
+      ! HotWall     |  1     | 9 ?
+      ! ColdWall    |  2     | 10 ?
+      ! BottomWall  |  3     | 10 ?
+      ! TopWall     |  4     | 10 ?
+      ! BendWall    |  5     | 10 ?
+      ! FrontWall   |  6     | 10 ?
+      ! BackWall    |  7     | 10 ?
+
+      nobj = 7
+      iobj = 0
+      do ii=nhis+1,nhis+nobj
+         iobj = iobj+1
+         hcode(10,ii) = 'I'
+         lochis(1,ii) = iobj
+      enddo
+      nhis = nhis + nobj
+
+      if (nid.eq.0) then
+      do ii=1,nhis
+        write(6,8)'lochis(1,',ii,')=',lochis(1,ii)
+      enddo
+      endif
+
+    8 format(a10,i3,a2,i3)
+
+      if (maxobj.lt.nobj) call exitti('increase maxobj in SIZE$',nobj)
+
+C     Definition of thermal boundary conditions
+      do ie=1,nelv
+        do iside=1,2*ldim
+          if(cbc(iside,ie,1).eq.'W  ') then
+              i0=1
+              j0=1
+              k0=1
+              i1=lx1
+              j1=ly1
+              k1=lz1
+            if (iside.eq.1) then
+              j1=1
+            elseif (iside.eq.2) then
+              i0=lx1
+            elseif (iside.eq.3) then
+              j0=ly1
+            elseif (iside.eq.4) then
+              i1=1
+            elseif (iside.eq.5) then
+              k1=1
+              cbc(iside,ie,2)='I  '
+            elseif (iside.eq.6) then
+              k0=lz1
+              cbc(iside,ie,2)='I  '
+            endif
+
+            if ((iside.eq.5).or.(iside.eq.6)) then
+              zmin = min(
+     &               min(
+     &               min(
+     &               zm1(i0,1,k0,ie),
+     &               zm1(i1,1,k0,ie)),
+     &               zm1(i1,1,k1,ie)),
+     &               zm1(i0,1,k1,ie))
+
+              zmax = max(
+     &               max(
+     &               max(
+     &               zm1(i0,1,k0,ie),
+     &               zm1(i1,1,k0,ie)),
+     &               zm1(i1,1,k1,ie)),
+     &               zm1(i0,1,k1,ie))
+
+              if (zmin.gt.0.16-1e-7)  iobj=6 ! Front
+              if (zmax.lt.(-0.16+1e-7))  iobj=7 ! Front
+
+            else
+              xmin = min(
+     &               min(
+     &               min(
+     &               xm1(i0,j0,1,ie),
+     &               xm1(i1,j0,1,ie)),
+     &               xm1(i1,j1,1,ie)),
+     &               xm1(i0,j1,1,ie))
+
+              xmax = max(
+     &               max(
+     &               max(
+     &               xm1(i0,j0,1,ie),
+     &               xm1(i1,j0,1,ie)),
+     &               xm1(i1,j1,1,ie)),
+     &               xm1(i0,j1,1,ie))
+
+              ymin = min(
+     &               min(
+     &               min(
+     &               ym1(i0,j0,1,ie),
+     &               ym1(i1,j0,1,ie)),
+     &               ym1(i1,j1,1,ie)),
+     &               ym1(i0,j1,1,ie))
+
+              ymax = max(
+     &               max(
+     &               max(
+     &               ym1(i0,j0,1,ie),
+     &               ym1(i1,j0,1,ie)),
+     &               ym1(i1,j1,1,ie)),
+     &               ym1(i0,j1,1,ie))
+              if (xmax.lt.1e-7) then
+                ! Hot Wall
+                iobj=1
+              else if (xmin.gt.(1.0-1e-7)) then
+                ! Cold Wall
+                iobj=2
+              else if (ymax.lt.1.0e-7) then
+                ! Bottom wall
+                iobj=3
+              else if (ymin.gt.1-1e-7) then
+                ! Top wall
+                iobj=4
+              else
+                ! Inside Bend
+                iobj=5
+              endif
+            endif
+              nmember(iobj) = nmember(iobj) + 1
+              mem = nmember(iobj)
+              eg  = lglel(ie)
+              object(iobj,mem,1) = eg
+              object(iobj,mem,2) = iside
+          endif
+        enddo
+      enddo
+
+      do iobj=1,nobj
+        nmemberTot(iobj)=nmember(iobj)
+      enddo
+
+      call gop(nmemberTot,w1,'+  ',nobj+1)
+
+      if (nid.eq.0) then
+        write(6,9)'  Coldwall:   ',nmemberTot(1),' faces'
+        write(6,9)'  Hotwall:    ',nmemberTot(2),' faces'
+        write(6,9)'  Bottomwall: ',nmemberTot(3),' faces'
+        write(6,9)'  Totwall:    ',nmemberTot(4),' faces'
+        write(6,9)'  Bendwall:   ',nmemberTot(5),' faces'
+        write(6,9)'  Frontwall:  ',nmemberTot(6),' faces'
+        write(6,9)'  Backwall:   ',nmemberTot(7),' faces'
+      endif
+   9  format(a15,i5,a7)
+
+      return
+      end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

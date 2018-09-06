@@ -1,0 +1,6 @@
+      real dens,visc,thcond,thcap,Pr_,Ra_
+      integer ifld_h
+      common /FLUIDPROP/
+     &  dens(lx1,ly1,lz1,lelv),visc(lx1,ly1,lz1,lelv)
+     & ,thcap(lx1,ly1,lz1,lelv),thcond(lx1,ly1,lz1,lelv)
+     & ,Pr_,Ra_,ifld_h

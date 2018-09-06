@@ -1,0 +1,435 @@
+      subroutine calc_utau(wd,dens,visc,utau,tke,hiRe,secondWallPoints)
+      include 'SIZE'
+      include 'TOTAL'
+
+      integer lxyz,lxyze
+      parameter(lxyz=lx1*ly1*lz1,lxyze=lxyz*lelv)
+      integer e,i,i0,i1,j,j0,j1,k,k0,k1,iw,jw,kw,i2
+      integer ipoint,wpoint,nyp
+      real gradu(lxyze,3,3),dens(1),visc(1),wd(1),tke(1)
+      real tau(3),norm(3),rho,mu,vsca,tauw,yp,yPlus,utau
+      logical notCalculated,secondWallPoints(1)
+      logical hiRe
+
+      notCalculated=.true.
+      utau=0.0
+
+      if (hiRe) then
+c       Let's locate one of the second points
+        do i=1,lxyze
+          if (notCalculated.and.(secondWallPoints(i))) then
+            ! assuming incompressible, visc(1)
+            yPlus=0.09**(0.25)*wd(i)*sqrt(tke(i))/visc(1)
+            utau=visc(1)*yPlus/wd(i)
+            notCalculated=.false.
+          endif
+        enddo
+    
+      else
+
+        call gradm1(gradu(1,1,1),gradu(1,1,2),gradu(1,1,3),vx)
+        call gradm1(gradu(1,2,1),gradu(1,2,2),gradu(1,2,3),vy)
+        call gradm1(gradu(1,3,1),gradu(1,3,2),gradu(1,3,3),vz)
+
+        call opcolv(gradu(1,1,1),gradu(1,1,2),gradu(1,1,3),bm1)
+        call opcolv(gradu(1,2,1),gradu(1,2,2),gradu(1,2,3),bm1)
+        call opcolv(gradu(1,3,1),gradu(1,3,2),gradu(1,3,3),bm1)
+
+        call opdssum(gradu(1,1,1),gradu(1,1,2),gradu(1,1,3))
+        call opdssum(gradu(1,2,1),gradu(1,2,2),gradu(1,2,3))
+        call opdssum(gradu(1,3,1),gradu(1,3,2),gradu(1,3,3))
+
+        call opcolv(gradu(1,1,1),gradu(1,1,2),gradu(1,1,3),binvm1)
+        call opcolv(gradu(1,2,1),gradu(1,2,2),gradu(1,2,3),binvm1)
+        call opcolv(gradu(1,3,1),gradu(1,3,2),gradu(1,3,3),binvm1)
+
+        do e=1,nelv
+          do iside=1,2*ldim
+            if((cbc(iside,e,1).eq.'W  ').AND.(notCalculated)) then
+              i0=1
+              j0=1
+              k0=1
+              i1=lx1
+              j1=ly1
+              k1=lz1
+              if(iside.eq.1) then
+                j0=2
+                j1=2
+              elseif(iside.eq.2) then
+                i0=lx1-1
+                i1=lx1-1
+              elseif(iside.eq.3) then
+                j0=ly1-1
+                j1=ly1-1
+              elseif(iside.eq.4) then
+                i0=2
+                i1=2
+              elseif(iside.eq.5) then
+                k0=2
+                k1=2
+              elseif(iside.eq.6) then
+                k0=lz1-1
+                k1=lz1-1
+              endif
+              do i=i0,i1
+              do j=j0,j1
+              do k=k0,k1
+                iw=i
+                jw=j
+                kw=k
+                if    (iside.eq.1) then
+                  jw=1
+                  norm(1)=unx(iw,kw,iside,e)
+                  norm(2)=uny(iw,kw,iside,e)
+                  norm(3)=unz(iw,kw,iside,e)
+                elseif(iside.eq.2) then
+                  iw=lx1
+                  norm(1)=unx(jw,kw,iside,e)
+                  norm(2)=uny(jw,kw,iside,e)
+                  norm(3)=unz(jw,kw,iside,e)
+                elseif(iside.eq.3) then
+                  jw=ly1
+                  norm(1)=unx(iw,kw,iside,e)
+                  norm(2)=uny(iw,kw,iside,e)
+                  norm(3)=unz(iw,kw,iside,e)
+                elseif(iside.eq.4) then
+                  iw=1
+                  norm(1)=unx(jw,kw,iside,e)
+                  norm(2)=uny(jw,kw,iside,e)
+                  norm(3)=unz(jw,kw,iside,e)
+                elseif(iside.eq.5) then
+                  kw=1
+                  norm(1)=unx(iw,jw,iside,e)
+                  norm(2)=uny(iw,jw,iside,e)
+                  norm(3)=unz(iw,jw,iside,e)
+                else
+                  kw=lx1
+                  norm(1)=unx(iw,jw,iside,e)
+                  norm(2)=uny(iw,jw,iside,e)
+                  norm(3)=unz(iw,jw,iside,e)
+                endif
+                ipoint=i+(j-1)*lx1+(k-1)*lx1*ly1+(e-1)*lxyz
+                wpoint=iw+(jw-1)*lx1+(kw-1)*lx1*ly1+(e-1)*lxyz
+                if(iflomach) then
+                  mu=visc(wpoint)
+                  rho=dens(wpoint)
+                else
+                  mu=visc(1)
+                  rho=dens(1)
+                endif
+
+                do i2=1,ldim
+                tau(i2)=0.0
+                  do j2=1,ldim
+                    tau(i2)=tau(i2)+
+     &      mu*(gradu(wpoint,i2,j2)+gradu(wpoint,j2,i2))*norm(j2)
+                  enddo
+                enddo
+
+                vsca=0.0
+                do i2=1,ldim
+                  vsca=vsca+tau(i2)*norm(i2)
+                enddo
+
+                tauw=0.0
+                do i2=1,ldim
+                  tauw=tauw+(tau(i2)-vsca*norm(i2))**2
+                enddo
+                tauw=sqrt(tauw)
+                utau=sqrt(tauw/rho)
+                notCalculated=.false.
+              enddo
+              enddo
+              enddo
+            endif
+          enddo
+        enddo
+      endif
+
+      return
+      end
+c-----------------------------------------------------------------------
+      subroutine y_p_limitsJavi(wd,dens,visc,ypmin,ypmax,ypave)
+      include 'SIZE'
+      include 'TOTAL'
+
+      integer lxyz,lxyze
+      parameter(lxyz=lx1*ly1*lz1,lxyze=lxyz*lelv)
+      integer e,i,i0,i1,j,j0,j1,k,k0,k1,iw,jw,kw,i2
+      integer ipoint,wpoint,nyp
+      real gradu(lxyze,3,3),dens(1),visc(1),wd(1)
+      real tau(3),norm(3),rho,mu,vsca,tauw,yp,utau,utauAve
+
+      ypmin=1.0d30
+      ypmax=-1.0d30
+      ypave=0.0
+      utauAve=0.0
+      nyp=0
+
+      call gradm1(gradu(1,1,1),gradu(1,1,2),gradu(1,1,3),vx)
+      call gradm1(gradu(1,2,1),gradu(1,2,2),gradu(1,2,3),vy)
+      call gradm1(gradu(1,3,1),gradu(1,3,2),gradu(1,3,3),vz)
+
+      call opcolv(gradu(1,1,1),gradu(1,1,2),gradu(1,1,3),bm1)
+      call opcolv(gradu(1,2,1),gradu(1,2,2),gradu(1,2,3),bm1)
+      call opcolv(gradu(1,3,1),gradu(1,3,2),gradu(1,3,3),bm1)
+
+      call opdssum(gradu(1,1,1),gradu(1,1,2),gradu(1,1,3))
+      call opdssum(gradu(1,2,1),gradu(1,2,2),gradu(1,2,3))
+      call opdssum(gradu(1,3,1),gradu(1,3,2),gradu(1,3,3))
+
+      call opcolv(gradu(1,1,1),gradu(1,1,2),gradu(1,1,3),binvm1)
+      call opcolv(gradu(1,2,1),gradu(1,2,2),gradu(1,2,3),binvm1)
+      call opcolv(gradu(1,3,1),gradu(1,3,2),gradu(1,3,3),binvm1)
+
+
+      do e=1,nelv
+        do iside=1,2*ldim
+          if(cbc(iside,e,1).eq.'W  ')then
+            i0=1
+            j0=1
+            k0=1
+            i1=lx1
+            j1=ly1
+            k1=lz1
+            if(iside.eq.1) then
+              j0=2
+              j1=2
+            elseif(iside.eq.2) then
+              i0=lx1-1
+              i1=lx1-1
+            elseif(iside.eq.3) then
+              j0=ly1-1
+              j1=ly1-1
+            elseif(iside.eq.4) then
+              i0=2
+              i1=2
+            elseif(iside.eq.5) then
+              k0=2
+              k1=2
+            elseif(iside.eq.6) then
+              k0=lz1-1
+              k1=lz1-1
+            endif
+            do i=i0,i1
+            do j=j0,j1
+            do k=k0,k1
+              iw=i
+              jw=j
+              kw=k
+              if    (iside.eq.1) then
+                jw=1
+                norm(1)=unx(iw,kw,iside,e)
+                norm(2)=uny(iw,kw,iside,e)
+                norm(3)=unz(iw,kw,iside,e)
+              elseif(iside.eq.2) then
+                iw=lx1
+                norm(1)=unx(jw,kw,iside,e)
+                norm(2)=uny(jw,kw,iside,e)
+                norm(3)=unz(jw,kw,iside,e)
+              elseif(iside.eq.3) then
+                jw=ly1
+                norm(1)=unx(iw,kw,iside,e)
+                norm(2)=uny(iw,kw,iside,e)
+                norm(3)=unz(iw,kw,iside,e)
+              elseif(iside.eq.4) then
+                iw=1
+                norm(1)=unx(jw,kw,iside,e)
+                norm(2)=uny(jw,kw,iside,e)
+                norm(3)=unz(jw,kw,iside,e)
+              elseif(iside.eq.5) then
+                kw=1
+                norm(1)=unx(iw,jw,iside,e)
+                norm(2)=uny(iw,jw,iside,e)
+                norm(3)=unz(iw,jw,iside,e)
+              else
+                kw=lx1
+                norm(1)=unx(iw,jw,iside,e)
+                norm(2)=uny(iw,jw,iside,e)
+                norm(3)=unz(iw,jw,iside,e)
+              endif
+              ipoint=i+(j-1)*lx1+(k-1)*lx1*ly1+(e-1)*lxyz
+              wpoint=iw+(jw-1)*lx1+(kw-1)*lx1*ly1+(e-1)*lxyz
+
+              mu=visc(wpoint)
+              rho=dens(wpoint)
+
+              do i2=1,ldim
+              tau(i2)=0.0
+                do j2=1,ldim
+                  tau(i2)=tau(i2)+
+     &             mu*(gradu(wpoint,i2,j2)+gradu(wpoint,j2,i2))*norm(j2)
+                enddo
+              enddo
+
+              vsca=0.0
+              do i2=1,ldim
+                vsca=vsca+tau(i2)*norm(i2)
+              enddo
+             tauw=0.0
+              do i2=1,ldim
+                tauw=tauw+(tau(i2)-vsca*norm(i2))**2
+              enddo
+              if((wd(ipoint).gt.0.0)) then ! avoid corners
+                tauw=sqrt(tauw)
+                utau=sqrt(tauw/rho)
+                yp=wd(ipoint)*utau*rho/mu
+                  
+                ypmin=min(ypmin,yp)
+                ypmax=max(ypmax,yp)
+                ypave=ypave+yp
+                utauAve=utauAve+utau
+                nyp=nyp+1
+              endif
+            enddo
+            enddo
+            enddo
+          endif
+        enddo
+      enddo
+
+      ypmin=glmin(ypmin,1)
+      ypmax=glmax(ypmax,1)
+      ypave=glsum(ypave,1)
+      utauAve=glsum(utauAve,1)
+      nyp=iglsum(nyp,1)
+      ypave=ypave/dble(nyp)
+      utauAve=utauAve/dble(nyp)
+
+      return
+      end
+
+c-----------------------------------------------------------------------
+      subroutine save_yp(ypField,wd,dens,visc)
+      include 'SIZE'
+      include 'TOTAL'
+
+      integer lxyz,lxyze
+      parameter(lxyz=lx1*ly1*lz1,lxyze=lxyz*lelv)
+      integer e,i,i0,i1,j,j0,j1,k,k0,k1,iw,jw,kw,i2
+      integer ipoint,wpoint
+      real gradu(lxyze,3,3),dens(1),visc(1),wd(1),ypField(1)
+      real tau(3),norm(3),rho,mu,vsca,tauw,yp,utau
+
+
+      call gradm1(gradu(1,1,1),gradu(1,1,2),gradu(1,1,3),vx)
+      call gradm1(gradu(1,2,1),gradu(1,2,2),gradu(1,2,3),vy)
+      call gradm1(gradu(1,3,1),gradu(1,3,2),gradu(1,3,3),vz)
+
+      call opcolv(gradu(1,1,1),gradu(1,1,2),gradu(1,1,3),bm1)
+      call opcolv(gradu(1,2,1),gradu(1,2,2),gradu(1,2,3),bm1)
+      call opcolv(gradu(1,3,1),gradu(1,3,2),gradu(1,3,3),bm1)
+
+      call opdssum(gradu(1,1,1),gradu(1,1,2),gradu(1,1,3))
+      call opdssum(gradu(1,2,1),gradu(1,2,2),gradu(1,2,3))
+      call opdssum(gradu(1,3,1),gradu(1,3,2),gradu(1,3,3))
+
+      call opcolv(gradu(1,1,1),gradu(1,1,2),gradu(1,1,3),binvm1)
+      call opcolv(gradu(1,2,1),gradu(1,2,2),gradu(1,2,3),binvm1)
+      call opcolv(gradu(1,3,1),gradu(1,3,2),gradu(1,3,3),binvm1)
+
+
+      do e=1,nelv
+        do iside=1,2*ldim
+          if(cbc(iside,e,1).eq.'W  ')then
+            i0=1
+            j0=1
+            k0=1
+            i1=lx1
+            j1=ly1
+            k1=lz1
+            if(iside.eq.1) then
+              j0=2
+              j1=2
+            elseif(iside.eq.2) then
+              i0=lx1-1
+              i1=lx1-1
+            elseif(iside.eq.3) then
+              j0=ly1-1
+              j1=ly1-1
+            elseif(iside.eq.4) then
+              i0=2
+              i1=2
+            elseif(iside.eq.5) then
+              k0=2
+              k1=2
+            elseif(iside.eq.6) then
+              k0=lz1-1
+              k1=lz1-1
+            endif
+            do i=i0,i1
+            do j=j0,j1
+            do k=k0,k1
+              iw=i
+              jw=j
+              kw=k
+              if    (iside.eq.1) then
+                jw=1
+                norm(1)=unx(iw,kw,iside,e)
+                norm(2)=uny(iw,kw,iside,e)
+                norm(3)=unz(iw,kw,iside,e)
+              elseif(iside.eq.2) then
+                iw=lx1
+                norm(1)=unx(jw,kw,iside,e)
+                norm(2)=uny(jw,kw,iside,e)
+                norm(3)=unz(jw,kw,iside,e)
+              elseif(iside.eq.3) then
+                jw=ly1
+                norm(1)=unx(iw,kw,iside,e)
+                norm(2)=uny(iw,kw,iside,e)
+                norm(3)=unz(iw,kw,iside,e)
+              elseif(iside.eq.4) then
+                iw=1
+                norm(1)=unx(jw,kw,iside,e)
+                norm(2)=uny(jw,kw,iside,e)
+                norm(3)=unz(jw,kw,iside,e)
+              elseif(iside.eq.5) then
+                kw=1
+                norm(1)=unx(iw,jw,iside,e)
+                norm(2)=uny(iw,jw,iside,e)
+                norm(3)=unz(iw,jw,iside,e)
+              else
+                kw=lx1
+                norm(1)=unx(iw,jw,iside,e)
+                norm(2)=uny(iw,jw,iside,e)
+                norm(3)=unz(iw,jw,iside,e)
+              endif
+              ipoint=i+(j-1)*lx1+(k-1)*lx1*ly1+(e-1)*lxyz
+              wpoint=iw+(jw-1)*lx1+(kw-1)*lx1*ly1+(e-1)*lxyz
+
+              mu=visc(wpoint)
+              rho=dens(wpoint)
+
+              do i2=1,ldim
+              tau(i2)=0.0
+                do j2=1,ldim
+                  tau(i2)=tau(i2)+
+     &             mu*(gradu(wpoint,i2,j2)+gradu(wpoint,j2,i2))*norm(j2)
+                enddo
+              enddo
+
+              vsca=0.0
+              do i2=1,ldim
+                vsca=vsca+tau(i2)*norm(i2)
+              enddo
+             tauw=0.0
+              do i2=1,ldim
+                tauw=tauw+(tau(i2)-vsca*norm(i2))**2
+              enddo
+              if((wd(ipoint).gt.0.0)) then ! avoid corners
+                tauw=sqrt(tauw)
+                utau=sqrt(tauw/rho)
+                yp=wd(ipoint)*utau*rho/mu
+                ypField(wpoint)=yp
+                ypField(ipoint)=yp
+              endif
+            enddo
+            enddo
+            enddo
+          endif
+        enddo
+      enddo
+
+      return
+      end
+

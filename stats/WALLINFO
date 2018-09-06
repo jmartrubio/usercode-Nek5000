@@ -1,0 +1,3 @@
+      real walldist
+
+      common /wall_info/ walldist(lx1,ly1,lz1,lelv)

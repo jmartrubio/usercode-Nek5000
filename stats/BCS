@@ -1,0 +1,3 @@
+      real Th,Tc
+      common /boundary_conditions/
+     & Th,Tc

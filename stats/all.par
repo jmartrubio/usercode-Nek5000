@@ -1,0 +1,43 @@
+#
+# nek parameter file
+#
+[GENERAL] 
+startFrom = all0.f00001
+stopAt =numSteps 
+numSteps = 18000
+
+#dt = 1e-5
+timeStepper = BDF3
+extrapolation = standard
+variableDt = yes
+targetCFL = 0.5
+
+writeControl = timeStep
+writeInterval = 18000
+
+userParam01 = 0    # start time collecting statistics
+userParam02 = 18000.0     # writeInterval 1D statistics 
+userParam03 = 1
+
+dealiasing = yes
+
+filtering = none # explicit # set to none in case of Smagorinski 
+filterWeight = 0.00 
+filterCutoffRatio = 1.0
+
+[PROBLEMTYPE]
+stressFormulation = no
+variableProperties = yes
+equation= incompNS
+
+[PRESSURE]
+#preconditioner = semg_amg
+residualTol = 1e-5
+residualProj = yes
+
+[VELOCITY]
+residualTol = 1e-6
+residualProj = yes
+
+[TEMPERATURE]
+residualTol = 1e-5

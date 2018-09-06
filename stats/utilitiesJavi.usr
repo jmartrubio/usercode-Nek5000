@@ -1,0 +1,263 @@
+c      subroutine computeHeat(phiT,loc,coord,norm,heatIn,areaIn)
+c
+cC 
+cC     Compute fluxes given temperature at phiT, for the boundary located with
+cC     coord close to loc, with norm normal. REturns heat and total integration area
+cC 
+c      include 'SIZE' 
+c      include 'TOTAL' 
+c 
+c      integer ielem,iside,i,i0,i1,j,j0,j1,k,k0,k1,n
+c      real phi(lx1*ly1*lz1*lelv),loc,coord(1),norm(3),heatIn 
+c      real fnorm(3),dp,a1,areaIn,gradT(lx1,ly1,lz1,lelv,3)
+c
+c      n=lx1*ly1*lz1*nelv 
+cc     First we compute the gradients of temperature  
+c
+c      call gradm1(gradT(1,1,1,1,1),
+c     &            gradT(1,1,1,1,2),
+c     &            gradT(1,1,1,1,3),phiT)
+c
+c      do i=1,n
+c        phi(i)=gradT(i,1,1,1,1)*norm(1)+
+c     &         gradT(i,1,1,1,2)*norm(2)
+c        if(if3d) phi(i)=phi(i)+
+c     &         gradT(i,1,1,1,3)*norm(3)
+c      enddo
+c
+c 
+c      heatIn=0.0 
+c      areaIn=0.0 
+c      do ielem=1,nelv 
+c        do iside=1,ndim*2 
+c          call facind(i0,i1,j0,j1,k0,k1,lx1,ly1,lz1,iside) 
+c          i=(i0+i1)/2  !just use the point in the middle of the face 
+c          j=(j0+j1)/2 
+c          k=(k0+k1)/2 
+c          ipoint=i+(j-1)*lx1+(k-1)*lx1*ly1+(ielem-1)*lx1*ly1*lz1 
+c          if(abs(coord(ipoint)-loc).lt.1.0d-7)then 
+c            call get_face_norm(ielem,iside,fnorm) 
+c            dp=fnorm(1)*norm(1)+fnorm(2)*norm(2) 
+c            if(if3d) dp=dp+fnorm(3)*norm(3) 
+c            if(abs(1.0d0-dp).lt.1.0d-8) then 
+c              do i=i0,i1 
+c              do j=j0,j1 
+c              do k=k0,k1 
+c                ipoint=i+(j-1)*lx1+(k-1)*lx1*ly1+(ielem-1)*lx1*ly1*lz1 
+c                if    ((iside.eq.1).or.(iside.eq.3)) then 
+c                  a1=area(i,k,iside,ielem) 
+c                elseif((iside.eq.2).or.(iside.eq.4)) then 
+c                  a1=area(j,k,iside,ielem) 
+c                else 
+c                  a1=area(i,j,iside,ielem) 
+c                endif 
+c                heatIn=heatIn+phi(ipoint)*a1 
+c                areaIn=areaIn+a1 
+c              enddo 
+c              enddo 
+c              enddo 
+c            endif 
+c          endif 
+c        enddo 
+c      enddo 
+c 
+c      heatIn=glsum(heatIn,1) 
+c      areaIn=glsum(areaIn,1) 
+c 
+c      return 
+c      end 
+c
+cc---------------------------------------------------------------
+      subroutine computeHeatInt(phiT)
+C 
+C     Compute fluxes given temperature at phiT, for the boundary located with
+C     coord close to loc, with norm normal. REturns heat and total integration area
+C 
+      include 'SIZE' 
+      include 'TOTAL' 
+
+c
+      real w1(0:maxobj)
+      integer ie,pf,ieg,ifc
+      real    n1,n2,n3,norm(3)
+      integer memtot,mem
+      integer ielem,iside,i,i0,i1,j,j0,j1,k,k0,k1,n
+      integer ix,iy,iz
+      real phiT(lx1,ly1,lz1,lelv)
+      real phi(lx1,ly1,lz1,lelv)
+      real gradT(lx1,ly1,lz1,lelv,3),areaInt,phiInt
+      real areaTot(0:maxobj),heatTot(0:maxobj)
+
+      n=lx1*ly1*lz1*nelv
+c     First we compute the gradients of temperature  
+
+      call gradm1(gradT(1,1,1,1,1),
+     &            gradT(1,1,1,1,2),
+     &            gradT(1,1,1,1,3),phiT)
+
+      call opcolv(gradT(1,1,1,1,1),
+     &             gradT(1,1,1,1,2),
+     &             gradT(1,1,1,1,3),bm1)
+
+      call opdssum(gradT(1,1,1,1,1),
+     &             gradT(1,1,1,1,2),
+     &             gradT(1,1,1,1,3))
+
+      call opcolv(gradT(1,1,1,1,1),
+     &             gradT(1,1,1,1,2),
+     &             gradT(1,1,1,1,3),binvm1)
+
+      do ii=1,nhis
+        areaTot(ii)=0.0
+        heatTot(ii)=0.0
+      enddo
+
+      do ie=1,nelv
+        do iside=1,2*ldim
+
+        call facind(i0,i1,j0,j1,k0,k1,lx1,ly1,lz1,iside)
+
+        do iz=k0,k1
+        do iy=j0,j1
+        do ix=i0,i1
+
+          if ((iside.eq.1).or.(iside.eq.3))then
+            norm(1)=unx(ix,iz,iside,ie)
+            norm(2)=uny(ix,iz,iside,ie)
+            norm(3)=unz(ix,iz,iside,ie)
+          elseif((iside.eq.2).or.(iside.eq.4))then
+            norm(1)=unx(iy,iz,iside,ie)
+            norm(2)=uny(iy,iz,iside,ie)
+            norm(3)=unz(iy,iz,iside,ie)
+          else
+            norm(1)=unx(ix,iy,iside,ie)
+            norm(2)=uny(ix,iy,iside,ie)
+            norm(3)=unz(ix,iy,iside,ie)
+          endif
+          phi(ix,iy,iz,ie)=
+     &          gradT(ix,iy,iz,ie,1)*norm(1)+
+     &          gradT(ix,iy,iz,ie,2)*norm(2)+
+     &          gradT(ix,iy,iz,ie,3)*norm(3)
+c          if (cbc(iside,ie,2).eq.'I  ') write(*,*) phi(ix,iy,iz,ie)
+        enddo 
+        enddo
+        enddo
+
+        enddo
+      enddo
+
+      nobj = 0
+      do ii=1,nhis
+        if (hcode(10,ii).EQ.'I') then
+          iobj   = lochis(1,ii)
+          memtot = nmember(iobj)
+          nobj   = max(iobj,nobj)
+            do mem=1,memtot
+               ieg   = object(iobj,mem,1)
+               ifc   = object(iobj,mem,2)
+               if (gllnid(ieg).eq.nid) then ! this processor has a contribution
+                  ie = gllel(ieg)
+                  
+                  phiInt= facint_v(phi,area,ifc,ie)
+                  areaInt=facint_area(area,ifc,ie)
+
+                  areaTot(iobj)=areaTot(iobj)+areaInt
+                  heatTot(iobj)=heatTot(iobj)+phiInt
+               endif
+            enddo
+         endif
+      enddo 
+     
+      call gop(areaTot,w1,'+  ',maxobj+1)
+      call gop(heatTot,w1,'+  ',maxobj+1)
+
+      ! write output
+
+      if (nid.eq.0) then
+        write(6,5)'Hot Wall:       ',heatTot(1),' Area:',areaTot(1)
+        write(6,5)'Cold Wall:      ',heatTot(2),' Area:',areaTot(2)
+        write(6,5)'Bottom Wall:    ',heatTot(3),' Area:',areaTot(3)
+        write(6,5)'Top Wall:       ',heatTot(4),' Area:',areaTot(4)
+        write(6,5)'Bend Wall:      ',heatTot(5),' Area:',areaTot(5)
+        write(6,5)'Front Wall:     ',heatTot(6),' Area:',areaTot(6)
+        write(6,5)'Back Wall:      ',heatTot(7),' Area:',areaTot(7)
+        write(6,6)'Balance(In+Out):',heatTot(1)+heatTot(2)
+        write(6,6)'Balance(All):   ',heatTot(1)+heatTot(2)+heatTot(3)
+     &                   +heatTot(4)+heatTot(5)+heatTot(6)+heatTot(7)
+      endif
+ 5    format(a18,1es13.4,a18,1es13.4)
+ 6    format(a18,1es13.4,/)
+
+      return
+      end
+
+c--------------------------------------------------------------------- 
+      function facint_area(area,f,e)
+c     Integrate volumetric array a() on face f of element e
+
+c        f  is in the preprocessor notation
+c        fd  is the dssum notation.
+c        27 June, 2012            PFF
+
+      include 'SIZE'
+      include 'TOPOL'
+      real area(lx1,lz1,6,lelt)
+
+      integer e,f,fd
+
+      call dsset(lx1,ly1,lz1) ! set counters
+      fd     = eface1(f)
+      js1    = skpdat(1,fd)
+      jf1    = skpdat(2,fd)
+      jskip1 = skpdat(3,fd)
+      js2    = skpdat(4,fd)
+      jf2    = skpdat(5,fd)
+      jskip2 = skpdat(6,fd)
+
+      sum=0.0
+      i = 0
+      do 100 j2=js2,jf2,jskip2
+      do 100 j1=js1,jf1,jskip1
+         i = i+1
+         sum = sum + area(i,1,f,e)
+  100 continue
+
+      facint_area = sum
+
+      return
+      end
+
+c--------------------------------------------------------------------- 
+
+      subroutine heatCalc(areaInt,phiInt,phi,ifc,ie)
+
+      include 'SIZE'
+      include 'TOTAL'
+     
+      integer ie ,ifc,e,pf,i
+      real phi(lx1,ly1,lz1,lelv),areaInt,phiInt
+      integer j1,js1,jf1,j2,js2,jf2,jskip1,jskip2
+
+      call dsset(lx1,ly1,lz1)    ! set up counters
+      pf     = eface1(ifc)         ! convert from preproc. notation
+      js1    = skpdat(1,pf)
+      jf1    = skpdat(2,pf)
+      jskip1 = skpdat(3,pf)
+      js2    = skpdat(4,pf)
+      jf2    = skpdat(5,pf)
+      jskip2 = skpdat(6,pf)
+C
+      areaInt=0.0
+      phiInt=0.0
+      i=0
+      do j2=js2,jf2,jskip2
+      do j1=js1,jf1,jskip1
+         i = i+1
+         areaInt  = areaInt + area(i,1,ifc,ie)
+         phiInt  =phiInt+ phi(j1,j2,1,ie)*area(i,1,ifc,ie)
+      enddo
+      enddo
+
+      return
+      end
+

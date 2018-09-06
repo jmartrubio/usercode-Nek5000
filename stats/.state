@@ -1,0 +1,6 @@
+SOURCE_ROOT=/home/javier/Nek5000
+FC=mpixlf77
+FFLAGS=-g -qrealsize=8 -qdpc=e -qsuffix=cpp=f -qsuppress=cmpmsg
+CC=mpixlc
+CFLAGS=
+PPLIST=EXTBAR CVODE MPI TIMER
